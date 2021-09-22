@@ -1,42 +1,42 @@
 #include "pch.h"
 
-void ErrorQuit(const char* msg);
+void ErrorQuit(std::wstring msg);
 void DislayError(const char* msg);
 DWORD WINAPI TCPServer4(LPVOID arg);
 DWORD WINAPI TCPServer6(LPVOID arg);
 
 int main(int argc, char* argv[])
 {
-	// 윈속 초기화
 	WSADATA wsa;
 
+	// 윈속 초기화
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) not_eq NO_ERROR)
 		return 1;
 
-	HANDLE hThread[2];
-	hThread[0] = CreateThread(nullptr, 0, TCPServer4, nullptr, 0, nullptr);
-	hThread[1] = CreateThread(nullptr, 0, TCPServer6, nullptr, 0, nullptr);
+	std::vector<HANDLE> hThread;
 
-	WaitForMultipleObjects(2, hThread, true, INFINITE);
+	hThread.reserve(2);
+	hThread.push_back(CreateThread(nullptr, 0, TCPServer4, nullptr, 0, nullptr));
+	hThread.push_back(CreateThread(nullptr, 0, TCPServer6, nullptr, 0, nullptr));
+
+	WaitForMultipleObjects(2, hThread.data(), true, INFINITE);
 
 	// 윈속 종료
 	WSACleanup();
 }
 
 // 소켓 함수 오류 출력 후 종료
-void ErrorQuit(const char* msg)
+void ErrorQuit(std::wstring msg)
 {
 	LPVOID lpMsgBuf;
 
-	//FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, WSAGetLastError(),
-	//	MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), static_cast<LPTSTR>(lpMsgBuf), 0, nullptr);
-
 	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, WSAGetLastError(),
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&lpMsgBuf, 0, nullptr);
-	MessageBox(nullptr, static_cast<LPCTSTR>(lpMsgBuf), msg, MB_ICONERROR);
+		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPTSTR>(&lpMsgBuf), 0, nullptr);
+
+	MessageBox(nullptr, static_cast<LPCTSTR>(lpMsgBuf), msg.c_str(), MB_ICONERROR);
 
 	LocalFree(lpMsgBuf);
-	exit(true);
+	//exit(true);
 }
 
 // 소켓 함수 오류 출력
@@ -45,7 +45,7 @@ void DislayError(const char* msg)
 	LPVOID lpMsgBuf;
 
 	//FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, WSAGetLastError(),
-	//	MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), static_cast<LPTSTR>(lpMsgBuf), 0, nullptr);
+	//	MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPTSTR>(&lpMsgBuf), 0, nullptr);
 
 	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, WSAGetLastError(),
 		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&lpMsgBuf, 0, nullptr);
@@ -60,11 +60,12 @@ DWORD WINAPI TCPServer4(LPVOID arg)
 	int retval;
 
 	// socket()
+	// 소켓 타입 : TCP 프로토콜(SOCK_STREAM)
 	SOCKET listen_sock{ socket(AF_INET, SOCK_STREAM, 0) };
 
 	if (listen_sock == INVALID_SOCKET)
-		ErrorQuit("socket()");
-
+		ErrorQuit(L"socket()");
+	
 	// bind()
 	sockaddr_in serveraddr;
 
@@ -77,13 +78,13 @@ DWORD WINAPI TCPServer4(LPVOID arg)
 	// retval = bind(listen_sock, reinterpret_cast<sockaddr*>(&serveraddr), sizeof(serveraddr));
 
 	if (retval == SOCKET_ERROR)
-		ErrorQuit("bind()");
+		ErrorQuit(L"bind()");
 
 	// listen()
-	retval - listen(listen_sock, SOMAXCONN);
+	retval = listen(listen_sock, SOMAXCONN);
 
 	if (retval == SOCKET_ERROR)
-		ErrorQuit("listen()");
+		ErrorQuit(L"listen()");
 
 	// 데이터 통신에 사용할 변수
 	SOCKET client_sock;
@@ -146,7 +147,7 @@ DWORD WINAPI TCPServer6(LPVOID arg)
 	SOCKET listen_sock{ socket(AF_INET6, SOCK_STREAM, 0) };
 
 	if (listen_sock == INVALID_SOCKET)
-		ErrorQuit("socket()");
+		ErrorQuit(L"socket()");
 
 	// bind()
 	sockaddr_in6 serveraddr;
@@ -160,13 +161,13 @@ DWORD WINAPI TCPServer6(LPVOID arg)
 	// retval = bind(listen_sock, reinterpret_cast<sockaddr*>(&serveraddr), sizeof(serveraddr));
 
 	if (retval == SOCKET_ERROR)
-		ErrorQuit("bind()");
+		ErrorQuit(L"bind()");
 
 	// listen()
-	retval - listen(listen_sock, SOMAXCONN);
+	retval = listen(listen_sock, SOMAXCONN);
 
 	if (retval == SOCKET_ERROR)
-		ErrorQuit("listen()");
+		ErrorQuit(L"listen()");
 
 	// 데이터 통신에 사용할 변수
 	SOCKET client_sock;
@@ -191,7 +192,7 @@ DWORD WINAPI TCPServer6(LPVOID arg)
 		char ipaddr[50];
 		DWORD ipaddrien{ sizeof(ipaddr) };
 
-		WSAAddressToString((sockaddr*)&clientaddr, sizeof(clientaddr), nullptr, ipaddr, &ipaddrien);
+		WSAAddressToString((sockaddr*)&clientaddr, sizeof(clientaddr), nullptr, (LPWSTR)ipaddr, &ipaddrien);
 		//WSAAddressToString(reinterpret_cast<sockaddr*>(&clientaddr), sizeof(clientaddr), nullptr, ipaddr, &ipaddrien);
 		std::cout << "\n[TCP 서버] 클라이언트 접속 : " << ipaddr << std::endl;
 

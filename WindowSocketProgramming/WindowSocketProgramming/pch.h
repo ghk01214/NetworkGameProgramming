@@ -2,6 +2,9 @@
 #pragma comment(lib, "ws2_32")
 
 #include <iostream>
+#include <string>
+#include <vector>
+
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
