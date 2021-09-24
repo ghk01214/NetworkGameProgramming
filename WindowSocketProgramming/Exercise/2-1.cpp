@@ -22,11 +22,11 @@ int main()
 	// szDescription	 = WS2_32.dll이 윈도우 소켓 구현에 대한 설명을 복사하는 NULL로 끝나는 ASCII 문자열
 	// szSystemStatus	 = WS2_32.dll이 윈도우 소켓의 관련 상태와 구성 정보를 복사하는 NULL로 끝나는 ASCII 문자열
 	std::cout << "Window Socket 2.2" << std::endl;
-	std::cout << (wsa2.wVersion & 255) << "." << (wsa2.wVersion >> 8) << ", " << (wsa2.wHighVersion & 255) << "." << (wsa2.wHighVersion >> 8)
+	std::cout << (wsa2.wVersion & 0xff) << "." << (wsa2.wVersion >> 8) << ", " << (wsa2.wHighVersion & 0xff) << "." << (wsa2.wHighVersion >> 8)
 		<< ", " << wsa2.szDescription << ", " << wsa2.szSystemStatus << std::endl << std::endl;
 
 	std::cout << "Window Socket 1.1" << std::endl;
-	std::cout << (wsa1.wVersion & 255) << "." << (wsa1.wVersion >> 8) << ", " << (wsa1.wHighVersion & 255) << "." << (wsa1.wHighVersion >> 8)
+	std::cout << (wsa1.wVersion & 0xff) << "." << (wsa1.wVersion >> 8) << ", " << (wsa1.wHighVersion & 0xff) << "." << (wsa1.wHighVersion >> 8)
 		<< ", " << wsa1.szDescription << ", " << wsa1.szSystemStatus << std::endl << std::endl;
 
 	MessageBox(nullptr, L"윈도우 소켓 초기화 성공", L"알림", MB_OK);
