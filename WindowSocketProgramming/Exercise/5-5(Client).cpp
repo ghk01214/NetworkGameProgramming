@@ -40,15 +40,27 @@ int main()
 		"A : 안녕하세요.",
 		"B : 반가워요.",
 		"A : 오늘따라 할 이야기가 많을 것 같네요.",
-		"B : 저도 그렇네요."
+		"B : 저도 그렇네요.",
 	};
+
+	std::string sBuf;
+	int sLen;
 
 	for (std::string str : vTestData)
 	{
-		std::string buf(BUFSIZE, '#');
-		str.copy(buf.data(), str.length());
+		sLen = str.length();
+		sBuf.resize(sLen);
+		str.copy(sBuf.data(), str.length());
 
-		int nReturnVal = send(connectSocket, buf.data(), BUFSIZE, 0);
+		int nReturnVal{ send(connectSocket, reinterpret_cast<char*>(&sLen), sizeof(int), 0) };
+
+		if (nReturnVal == SOCKET_ERROR)
+		{
+			DisplayError("send(1)");
+			break;
+		}
+
+		nReturnVal = send(connectSocket, sBuf.data(), sLen, 0);
 
 		if (nReturnVal == SOCKET_ERROR)
 		{
@@ -56,7 +68,7 @@ int main()
 			break;
 		}
 
-		std::cout << "[TCP 클라이언트] " << nReturnVal <<  " + " << sizeof(int) << "바이트를 보냈습니다." << std::endl;
+		std::cout << "[TCP 클라이언트] " << nReturnVal << " + " << sizeof(int) << "바이트를 보냈습니다." << std::endl;
 	}
 
 	closesocket(connectSocket);
