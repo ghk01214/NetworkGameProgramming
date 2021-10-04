@@ -3,15 +3,20 @@
 
 #include <iostream>
 #include <string>
+#include <fstream>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
 #define SERVERPORT	9000
-#define BUFSIZE		50
+#define BUFSIZE		512
+
+// 출력된 바로 전 라인 제거
+//std::cout << "\33[2K\x1B[A";
 
 void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
-int recvn(SOCKET socket, std::string* buf, char* buff, int nLength, int flags);
+int recvns(SOCKET socket, std::string* buf, int nLength, int flags);
+int recvnc(SOCKET socket, char* buf, int nLength, int flags);
 
 int main()
 {
@@ -41,8 +46,9 @@ int main()
 	SOCKET		 clientSocket;
 	sockaddr_in	 clientAddr;
 	int			 nClAddrLen;
+
 	std::string	 sBuf;
-	sBuf.resize(BUFSIZE);
+	int			 sLen;
 
 	while (true)
 	{
@@ -59,7 +65,19 @@ int main()
 
 		while (true)
 		{
-			int nReturnVal = recvn(clientSocket, &sBuf, nullptr, BUFSIZE, 0);
+			int nReturnVal{ recvnc(clientSocket, reinterpret_cast<char*>(&sLen), sizeof(int), 0) };
+
+			if (nReturnVal == SOCKET_ERROR)
+			{
+				DisplayError("recvn(1)");
+				break;
+			}
+			else if (nReturnVal == 0)
+				break;
+
+			sBuf.resize(sLen);
+
+			nReturnVal = recvns(clientSocket, &sBuf, sLen, 0);
 
 			if (nReturnVal == SOCKET_ERROR)
 			{
@@ -106,7 +124,7 @@ void DisplayError(std::string msg)
 	LocalFree(lpMsgBuf);
 }
 
-int recvn(SOCKET socket, std::string* buf, char* buff, int nLength, int flags)
+int recvns(SOCKET socket, std::string* buf, int nLength, int flags)
 {
 	int nReceived;
 	int nLeft{ nLength };
@@ -115,6 +133,28 @@ int recvn(SOCKET socket, std::string* buf, char* buff, int nLength, int flags)
 	while (nLeft > 0)
 	{
 		nReceived = recv(socket, ptr->data(), nLeft, flags);
+
+		if (nReceived == SOCKET_ERROR)
+			return SOCKET_ERROR;
+		else if (nReceived == 0)
+			break;
+
+		nLeft -= nReceived;
+		ptr += nReceived;
+	}
+
+	return nLength - nLeft;
+}
+
+int recvnc(SOCKET socket, char* buf, int nLength, int flags)
+{
+	int nReceived;
+	int nLeft{ nLength };
+	char* ptr{ buf };
+
+	while (nLeft > 0)
+	{
+		nReceived = recv(socket, ptr, nLeft, flags);
 
 		if (nReceived == SOCKET_ERROR)
 			return SOCKET_ERROR;
