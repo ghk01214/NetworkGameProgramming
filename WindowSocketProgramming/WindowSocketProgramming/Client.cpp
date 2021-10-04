@@ -13,7 +13,7 @@
 
 void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
-INT recvn(SOCKET connectedSocket, std::string buf, INT nLength, INT flags);
+INT recvn(SOCKET connectedSocket, std::string* buf, INT nLength, INT flags);
 DWORD WINAPI TCPClient4();
 DWORD WINAPI TCPClient6();
 
@@ -57,15 +57,15 @@ void DisplayError(std::string msg)
 	LocalFree(lpMsgBuf);
 }
 
-INT recvn(SOCKET connectedSocket, std::string buf, INT nLength, INT flags)
+INT recvn(SOCKET connectedSocket, std::string* buf, INT nLength, INT flags)
 {
 	INT nReceived;
-	std::string ptr{ buf };
+	std::string* ptr{ buf };
 	INT nLeft{ nLength };
 
 	while (nLeft > 0)
 	{
-		nReceived = recv(connectedSocket, ptr.data(), nLeft, flags);
+		nReceived = recv(connectedSocket, ptr->data(), nLeft, flags);
 
 		if (nReceived == SOCKET_ERROR)
 			return SOCKET_ERROR;
@@ -117,7 +117,7 @@ DWORD WINAPI TCPClient4()
 
 		std::cout << "[TCP Client] " << nReturnVal << "바이트를 보냈습니다." << std::endl;
 
-		nReturnVal = recvn(sock, buff, nReturnVal, 0);
+		nReturnVal = recvn(sock, &buff, nReturnVal, 0);
 
 		if (nReturnVal == SOCKET_ERROR)
 		{
@@ -176,7 +176,7 @@ DWORD WINAPI TCPClient6()
 
 		std::cout << "[TCP Client] " << nReturnVal << "바이트를 보냈습니다." << std::endl;
 
-		//nReturnVal = recvn(sock, buf, nReturnVal, 0);
+		nReturnVal = recvn(sock, &buff, nReturnVal, 0);
 
 		if (nReturnVal == SOCKET_ERROR)
 		{
