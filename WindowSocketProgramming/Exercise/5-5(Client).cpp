@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <fstream>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
@@ -36,39 +37,53 @@ int main()
 	if (connect(connectSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
 		ErrorQuit("connect()");
 
-	std::vector<std::string> vTestData{
-		"A : 안녕하세요.",
-		"B : 반가워요.",
-		"A : 오늘따라 할 이야기가 많을 것 같네요.",
-		"B : 저도 그렇네요.",
-	};
+	std::string sName;
 
-	std::string sBuf;
-	int sLen;
+	std::cout << "전송하고자 하는 파일의 이름 : ";
+	std::getline(std::cin, sName);
 
-	for (std::string str : vTestData)
+	std::ifstream fSendFile{ sName, std::ios::binary };
+
+	if (fSendFile.fail())
 	{
-		sLen = str.length();
-		sBuf.resize(sLen);
-		str.copy(sBuf.data(), str.length());
+		std::cout << "파일 열기 실패" << std::endl;
+		return 0;
+	}
 
-		int nReturnVal{ send(connectSocket, reinterpret_cast<char*>(&sLen), sizeof(int), 0) };
+	std::vector<std::string> vContain{ sName };
+	std::string				 sData;
+	int						 sLength;
+
+	fSendFile.seekg(0, std::ios::end);
+	sData.resize(fSendFile.tellg());
+	fSendFile.seekg(0, std::ios::beg);
+	fSendFile.read(sData.data(), sData.size());
+
+	vContain.push_back(sData);
+
+	for (std::string sBytes : vContain)
+	{
+		sLength = sBytes.length();
+
+		int nReturnVal{ send(connectSocket, reinterpret_cast<char*>(&sLength), sizeof(int), 0) };
 
 		if (nReturnVal == SOCKET_ERROR)
 		{
-			DisplayError("send(1)");
+			DisplayError("send(길이)");
 			break;
 		}
 
-		nReturnVal = send(connectSocket, sBuf.data(), sLen, 0);
+		nReturnVal = send(connectSocket, sBytes.data(), sLength, 0);
 
 		if (nReturnVal == SOCKET_ERROR)
 		{
-			DisplayError("send(2)");
+			DisplayError("send(데이터)");
 			break;
 		}
 
-		std::cout << "[TCP 클라이언트] " << nReturnVal << " + " << sizeof(int) << "바이트를 보냈습니다." << std::endl;
+		std::cout << "[TCP 클라이언트] " << sizeof(int) << " + " << nReturnVal << "바이트를 보냈습니다." << std::endl;
+
+		Sleep(1000);
 	}
 
 	closesocket(connectSocket);
