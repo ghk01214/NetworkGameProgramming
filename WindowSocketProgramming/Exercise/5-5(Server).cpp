@@ -33,9 +33,9 @@ int main()
 	sockaddr_in serverAddr;
 	ZeroMemory(&serverAddr, sizeof(serverAddr));
 
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serverAddr.sin_port = htons(SERVERPORT);
+	serverAddr.sin_family		 = AF_INET;
+	serverAddr.sin_addr.s_addr	 = htonl(INADDR_ANY);
+	serverAddr.sin_port			 = htons(SERVERPORT);
 
 	if (bind(listenSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
 		ErrorQuit("bind()");
@@ -43,19 +43,19 @@ int main()
 	if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
 		ErrorQuit("listen()");
 
-	SOCKET		 clientSocket;
-	sockaddr_in	 clientAddr;
-	int			 nClAddrLen;
+	SOCKET			 clientSocket;
+	sockaddr_in		 clientAddr;
+	int				 nClAddrLen;
 
-	std::string	 sBuf;
-	int			 sLen;
+	std::string		 sData;
+	int				 nLength;
 
-	std::ofstream out;
-	std::string filename;
+	std::ofstream	 receiveFile;
+	std::string		 sFileName;
 
 	while (true)
 	{
-		nClAddrLen = sizeof(clientAddr);
+		nClAddrLen	 = sizeof(clientAddr);
 		clientSocket = accept(listenSocket, reinterpret_cast<sockaddr*>(&clientAddr), &nClAddrLen);
 
 		if (clientSocket == INVALID_SOCKET)
@@ -68,7 +68,7 @@ int main()
 
 		while (true)
 		{
-			int nReturnVal{ recvnc(clientSocket, reinterpret_cast<char*>(&sLen), sizeof(int), 0) };
+			int nReturnVal{ recvnc(clientSocket, reinterpret_cast<char*>(&nLength), sizeof(int), 0) };
 
 			if (nReturnVal == SOCKET_ERROR)
 			{
@@ -78,9 +78,9 @@ int main()
 			else if (nReturnVal == 0)
 				break;
 
-			sBuf.resize(sLen);
+			sData.resize(nLength);
 
-			nReturnVal = recvns(clientSocket, &sBuf, sLen, 0);
+			nReturnVal = recvns(clientSocket, &sData, nLength, 0);
 
 			if (nReturnVal == SOCKET_ERROR)
 			{
@@ -90,21 +90,21 @@ int main()
 			else if (nReturnVal == 0)
 				break;
 
-			if (!out.is_open())
+			if (!receiveFile.is_open())
 			{
-				filename = sBuf;
-				out = std::ofstream{ filename, std::ios::binary };
+				sFileName	 = sData;
+				receiveFile	 = std::ofstream{ sFileName, std::ios::binary };
 			}
 			else
 			{
-				out.write(sBuf.data(), sLen);
+				receiveFile.write(sData.data(), nLength);
 
-				std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << filename << " 파일 저장" << std::endl;
+				std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << sFileName << " 파일 저장" << std::endl;
 			}
 		}
 
 		closesocket(clientSocket);
-		out.close();
+		receiveFile.close();
 
 		std::cout << "[TCP 서버] 클라이언트 종료 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl;
 	}
@@ -135,6 +135,7 @@ void DisplayError(std::string msg)
 		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPTSTR>(&lpMsgBuf), 0, nullptr);
 
 	std::cout << "[" << msg << "] " << static_cast<char*>(lpMsgBuf) << std::endl;
+
 	LocalFree(lpMsgBuf);
 }
 
