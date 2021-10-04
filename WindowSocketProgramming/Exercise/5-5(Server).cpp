@@ -50,6 +50,9 @@ int main()
 	std::string	 sBuf;
 	int			 sLen;
 
+	std::ofstream out;
+	std::string filename;
+
 	while (true)
 	{
 		nClAddrLen = sizeof(clientAddr);
@@ -87,10 +90,21 @@ int main()
 			else if (nReturnVal == 0)
 				break;
 
-			std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << sBuf << std::endl;
+			if (!out.is_open())
+			{
+				filename = sBuf;
+				out = std::ofstream{ filename, std::ios::binary };
+			}
+			else
+			{
+				out.write(sBuf.data(), sLen);
+
+				std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << filename << " 파일 저장" << std::endl;
+			}
 		}
 
 		closesocket(clientSocket);
+		out.close();
 
 		std::cout << "[TCP 서버] 클라이언트 종료 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl;
 	}
