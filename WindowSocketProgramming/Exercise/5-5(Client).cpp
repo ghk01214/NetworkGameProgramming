@@ -5,12 +5,17 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <random>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
 #define SERVERIP	"127.0.0.1"
 #define SERVERPORT	9000
-#define BUFSIZE		50
+#define MAXBUFSIZE	512
+#define MINBUFSIZE	50
+
+std::random_device rd;
+std::default_random_engine dre(rd());
 
 void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
@@ -37,29 +42,64 @@ int main()
 	if (connect(connectSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
 		ErrorQuit("connect()");
 
-	std::string sName;
+	std::string sFileName;
 
 	std::cout << "전송하고자 하는 파일의 이름 : ";
-	std::getline(std::cin, sName);
+	std::getline(std::cin, sFileName);
 
-	std::ifstream fSendFile{ sName, std::ios::binary };
+	std::ifstream fSendFile{ sFileName, std::ios::binary };
 
 	if (fSendFile.fail())
 	{
-		std::cout << "파일 열기 실패" << std::endl;
+		std::cout << "파일 읽기 실패" << std::endl;
 		return 0;
 	}
 
-	std::vector<std::string> vContain{ sName };
+	std::vector<std::string> vContain;
 	std::string				 sData;
 	int						 sLength;
+	size_t					 fileSize;
 
+	// 파일의 크기 확인
 	fSendFile.seekg(0, std::ios::end);
-	sData.resize(fSendFile.tellg());
+	fileSize = fSendFile.tellg();
 	fSendFile.seekg(0, std::ios::beg);
-	fSendFile.read(sData.data(), sData.size());
 
-	vContain.push_back(sData);
+	// 전송할 파일의 사이즈를 먼저 vector에 push한 다음 파일 이름을 push한다
+	// 전송 순서 : 파일 크기 -> 파일 이름 -> 파일 데이터
+	vContain.push_back(std::to_string(fileSize));
+	vContain.push_back(sFileName);
+
+	// 전송하는 데이터를 가변 길이로 하기 위해 매번 전송하는 바이트 수를 50~ 512 바이트 사이에서 랜덤으로 설정
+	std::uniform_int_distribution<>	 uid(MINBUFSIZE, MAXBUFSIZE);
+	size_t							 uploadSize{};
+
+	while (true)
+	{
+		// 가변 데이터 길이 랜덤 설정
+		int randSize{ uid(dre) };
+		uploadSize += randSize;
+		
+		// 전송한 총 바이트 수가 파일의 크기보다 클 경우 파일 사이즈에 맞춰서 전송 바이트 용량을 맞춘다
+		if (uploadSize > fileSize)
+		{
+			uploadSize -= randSize;
+			randSize = fileSize - uploadSize;
+			uploadSize += randSize;
+
+			sData.resize(randSize);
+			fSendFile.read(sData.data(), sData.size());
+			vContain.push_back(sData);
+
+			break;
+		}
+
+		sData.resize(randSize);
+		fSendFile.read(sData.data(), sData.size());
+		vContain.push_back(sData);
+	}
+
+	uploadSize = 0;
 
 	for (std::string sBytes : vContain)
 	{
@@ -81,16 +121,24 @@ int main()
 			break;
 		}
 
-		std::cout << "[TCP 클라이언트] " << sizeof(int) << " + " << nReturnVal << "바이트를 보냈습니다." << std::endl;
+		uploadSize += sLength;
 
-		Sleep(1000);
+		std::cout.precision(4);
+		std::cout << "\x1B[2K";
+		std::cout << "[TCP 클라이언트] " << sizeof(int) << " + " << nReturnVal << "바이트를 보냈습니다." << std::endl;
+		std::cout << "업로드 중(" << static_cast<float>(uploadSize) / fileSize * 100 << "%)   " << std::endl;
+		std::cout << "\x1B[2A";
 	}
+
+	std::cout << "\x1B[B\x1B[K\x1B[A\x1B[K";
+	std::cout << "업로드 완료(" << static_cast<float>(uploadSize) / fileSize * 100 << "%, 총 " << fileSize << "바이트)" << std::endl;
 
 	closesocket(connectSocket);
 
 	WSACleanup();
 }
 
+// 소켓 함수 오류 출력 후 종료
 void ErrorQuit(std::string msg)
 {
 	LPVOID lpMsgBuf;
@@ -104,6 +152,7 @@ void ErrorQuit(std::string msg)
 	exit(true);
 }
 
+// 소켓 함수 오류 출력
 void DisplayError(std::string msg)
 {
 	LPVOID lpMsgBuf;
