@@ -10,9 +10,6 @@
 #define SERVERPORT	9000
 #define BUFSIZE		512
 
-// 출력된 바로 전 라인 제거
-//std::cout << "\33[2K\x1B[A";
-
 void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
 int recvns(SOCKET socket, std::string* buf, int nLength, int flags);
@@ -33,9 +30,9 @@ int main()
 	sockaddr_in serverAddr;
 	ZeroMemory(&serverAddr, sizeof(serverAddr));
 
-	serverAddr.sin_family		 = AF_INET;
-	serverAddr.sin_addr.s_addr	 = htonl(INADDR_ANY);
-	serverAddr.sin_port			 = htons(SERVERPORT);
+	serverAddr.sin_family = AF_INET;
+	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	serverAddr.sin_port = htons(SERVERPORT);
 
 	if (bind(listenSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
 		ErrorQuit("bind()");
@@ -55,7 +52,7 @@ int main()
 
 	while (true)
 	{
-		nClAddrLen	 = sizeof(clientAddr);
+		nClAddrLen = sizeof(clientAddr);
 		clientSocket = accept(listenSocket, reinterpret_cast<sockaddr*>(&clientAddr), &nClAddrLen);
 
 		if (clientSocket == INVALID_SOCKET)
@@ -64,56 +61,85 @@ int main()
 			break;
 		}
 
-		std::cout << "[TCP 서버] 클라이언트 접속 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl;
+		std::cout << "[TCP 서버] 클라이언트 접속 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl << std::endl;
+
+		bool	 bGetFileSize{ false };
+		size_t	 fileSize{};
+		size_t	 downloadSize{};
 
 		while (true)
 		{
+			// 고정 길이 데이터인 가변 길이 데이터의 크기를 받아온다
 			int nReturnVal{ recvnc(clientSocket, reinterpret_cast<char*>(&nLength), sizeof(int), 0) };
 
 			if (nReturnVal == SOCKET_ERROR)
 			{
-				DisplayError("recvn(1)");
+				DisplayError("recvn(length)");
 				break;
 			}
 			else if (nReturnVal == 0)
 				break;
-
+			
+			// 고정 길이 데이터로 받은 가변 데이터의 크기에 맞춰 string 크기 변경
 			sData.resize(nLength);
 
+			// 가변 길이 데이터인 실제 전송하고자 하는 데이터를 받아온다
 			nReturnVal = recvns(clientSocket, &sData, nLength, 0);
 
 			if (nReturnVal == SOCKET_ERROR)
 			{
-				DisplayError("recvn(2)");
+				DisplayError("recvn(data)");
 				break;
 			}
 			else if (nReturnVal == 0)
 				break;
 
-			if (!receiveFile.is_open())
+			// 맨 처음에 받아올 파일의 사이즈를 fileSize에 저장
+			if (!bGetFileSize)
 			{
-				sFileName	 = sData;
-				receiveFile	 = std::ofstream{ sFileName, std::ios::binary };
+				bGetFileSize = true;
+				fileSize = std::stoi(sData);		// 수신받은 데이터는 문자열이므로 정수형으로 바꿔준다
 			}
+			// 다음으로 다운 받을 파일의 이름을 sFileName에 저장후 receiveFile 열기
+			else if (!receiveFile.is_open())
+			{
+				sFileName = sData;
+				receiveFile.open(sFileName, std::ios::binary);
+
+				if (receiveFile.fail())
+				{
+					std::cout << "파일 생성 실패" << std::endl;
+					return 0;
+				}
+			}
+			// 이후 파일 데이터 읽어오고 전송률 표시하기
 			else
 			{
 				receiveFile.write(sData.data(), nLength);
+				downloadSize += nLength;
 
-				std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << sFileName << " 파일 저장" << std::endl;
+				// 소수점 아래 2자리까지 표시되도록 설정
+				std::cout.precision(4);
+				std::cout << "다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)  \n";
+				std::cout << "\x1B[A";		// 전송률이 내려가지 않고 그 줄에서 지우고 쓰기를 반복한다
 			}
 		}
 
+		std::cout << "다운로드 완료(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)" << std::endl;
+		std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << sFileName << " 파일 저장" << std::endl << std::endl;
+		
 		closesocket(clientSocket);
 		receiveFile.close();
 
 		std::cout << "[TCP 서버] 클라이언트 종료 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl;
+		std::cout << "========================================================================" << std::endl;
 	}
 
 	closesocket(listenSocket);
 
 	WSACleanup();
 }
-
+// 소켓 함수 오류 출력 후 종료
 void ErrorQuit(std::string msg)
 {
 	LPVOID lpMsgBuf;
@@ -127,6 +153,7 @@ void ErrorQuit(std::string msg)
 	exit(true);
 }
 
+// 소켓 함수 오류 출력
 void DisplayError(std::string msg)
 {
 	LPVOID lpMsgBuf;
@@ -139,6 +166,7 @@ void DisplayError(std::string msg)
 	LocalFree(lpMsgBuf);
 }
 
+// 전송받은 변수형이 std::string형인 경우의 recvn 함수
 int recvns(SOCKET socket, std::string* buf, int nLength, int flags)
 {
 	int nReceived;
@@ -161,6 +189,7 @@ int recvns(SOCKET socket, std::string* buf, int nLength, int flags)
 	return nLength - nLeft;
 }
 
+// 전송받은 변수형이 char형인 경우의 recvn 함수
 int recvnc(SOCKET socket, char* buf, int nLength, int flags)
 {
 	int nReceived;
