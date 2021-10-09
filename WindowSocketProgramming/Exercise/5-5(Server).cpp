@@ -12,7 +12,7 @@
 
 void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
-int recvns(SOCKET socket, std::string* buf, int nLength, int flags);
+int recvn(SOCKET socket, std::string* buf, int nLength, int flags);
 int recvnc(SOCKET socket, char* buf, int nLength, int flags);
 
 int main()
@@ -45,7 +45,7 @@ int main()
 	int				 nClAddrLen;
 
 	std::string		 sData;
-	int				 nLength;
+	std::string		 sLength;
 
 	std::ofstream	 receiveFile;
 	std::string		 sFileName;
@@ -66,11 +66,12 @@ int main()
 		bool	 bGetFileSize{ false };
 		size_t	 fileSize{};
 		size_t	 downloadSize{};
+		int		 nLength;
 
 		while (true)
 		{
 			// 고정 길이 데이터인 가변 길이 데이터의 크기를 받아온다
-			int nReturnVal{ recvnc(clientSocket, reinterpret_cast<char*>(&nLength), sizeof(int), 0) };
+			int nReturnVal{ recvn(clientSocket, &sLength, sizeof(int), 0) };
 
 			if (nReturnVal == SOCKET_ERROR)
 			{
@@ -79,12 +80,14 @@ int main()
 			}
 			else if (nReturnVal == 0)
 				break;
-			
+
+			nLength = std::stoi(sLength);
+
 			// 고정 길이 데이터로 받은 가변 데이터의 크기에 맞춰 string 크기 변경
 			sData.resize(nLength);
 
 			// 가변 길이 데이터인 실제 전송하고자 하는 데이터를 받아온다
-			nReturnVal = recvns(clientSocket, &sData, nLength, 0);
+			nReturnVal = recvn(clientSocket, &sData, nLength, 0);
 
 			if (nReturnVal == SOCKET_ERROR)
 			{
@@ -127,7 +130,7 @@ int main()
 
 		std::cout << "다운로드 완료(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)" << std::endl;
 		std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << sFileName << " 파일 저장" << std::endl << std::endl;
-		
+
 		closesocket(clientSocket);
 		receiveFile.close();
 
@@ -166,8 +169,7 @@ void DisplayError(std::string msg)
 	LocalFree(lpMsgBuf);
 }
 
-// 전송받은 변수형이 std::string형인 경우의 recvn 함수
-int recvns(SOCKET socket, std::string* buf, int nLength, int flags)
+int recvn(SOCKET socket, std::string* buf, int nLength, int flags)
 {
 	int nReceived;
 	int nLeft{ nLength };
@@ -176,29 +178,6 @@ int recvns(SOCKET socket, std::string* buf, int nLength, int flags)
 	while (nLeft > 0)
 	{
 		nReceived = recv(socket, ptr->data(), nLeft, flags);
-
-		if (nReceived == SOCKET_ERROR)
-			return SOCKET_ERROR;
-		else if (nReceived == 0)
-			break;
-
-		nLeft -= nReceived;
-		ptr += nReceived;
-	}
-
-	return nLength - nLeft;
-}
-
-// 전송받은 변수형이 char형인 경우의 recvn 함수
-int recvnc(SOCKET socket, char* buf, int nLength, int flags)
-{
-	int nReceived;
-	int nLeft{ nLength };
-	char* ptr{ buf };
-
-	while (nLeft > 0)
-	{
-		nReceived = recv(socket, ptr, nLeft, flags);
 
 		if (nReceived == SOCKET_ERROR)
 			return SOCKET_ERROR;

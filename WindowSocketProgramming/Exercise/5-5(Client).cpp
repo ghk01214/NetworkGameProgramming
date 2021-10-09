@@ -57,7 +57,7 @@ int main()
 
 	std::vector<std::string> vContain;
 	std::string				 sData;
-	int						 sLength;
+	int						 nLength;
 	size_t					 fileSize;
 
 	// 파일의 크기 확인
@@ -103,9 +103,10 @@ int main()
 
 	for (std::string sBytes : vContain)
 	{
-		sLength = sBytes.length();
+		nLength = sBytes.length();
 
-		int nReturnVal{ send(connectSocket, reinterpret_cast<char*>(&sLength), sizeof(int), 0) };
+		int nReturnVal{ send(connectSocket, reinterpret_cast<std::string*>(&nLength)->data(), sizeof(int), 0) };
+		//int nReturnVal{ send(connectSocket, std::to_string(sLength).data(), sizeof(int), 0) };
 
 		if (nReturnVal == SOCKET_ERROR)
 		{
@@ -113,7 +114,7 @@ int main()
 			break;
 		}
 
-		nReturnVal = send(connectSocket, sBytes.data(), sLength, 0);
+		nReturnVal = send(connectSocket, sBytes.data(), nLength, 0);
 
 		if (nReturnVal == SOCKET_ERROR)
 		{
@@ -121,7 +122,7 @@ int main()
 			break;
 		}
 
-		uploadSize += sLength;
+		uploadSize += nLength;
 
 		std::cout.precision(4);
 		std::cout << "\x1B[2K";
