@@ -13,7 +13,6 @@
 void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
 int recvn(SOCKET socket, std::string* buf, int nLength, int flags);
-int recvnc(SOCKET socket, char* buf, int nLength, int flags);
 
 int main()
 {

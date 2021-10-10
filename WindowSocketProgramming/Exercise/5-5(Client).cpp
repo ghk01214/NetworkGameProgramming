@@ -105,8 +105,7 @@ int main()
 	{
 		nLength = sBytes.length();
 
-		int nReturnVal{ send(connectSocket, reinterpret_cast<std::string*>(&nLength)->data(), sizeof(int), 0) };
-		//int nReturnVal{ send(connectSocket, std::to_string(sLength).data(), sizeof(int), 0) };
+		int nReturnVal{ send(connectSocket, std::to_string(nLength).data(), sizeof(int), 0) };
 
 		if (nReturnVal == SOCKET_ERROR)
 		{
