@@ -122,8 +122,7 @@ int main()
 
 				// 소수점 아래 2자리까지 표시되도록 설정
 				std::cout.precision(4);
-				std::cout << "다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)  \n";
-				std::cout << "\x1B[A";		// 전송률이 내려가지 않고 그 줄에서 지우고 쓰기를 반복한다
+				std::cout << "다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)    \r";
 			}
 		}
 
