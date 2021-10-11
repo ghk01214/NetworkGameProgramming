@@ -3,25 +3,137 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
+#include <fstream>
+#include <random>
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
-#define SERVERPORT 9000
-#define BUFFERSIZE 512
+#define SERVERIP	"127.0.0.1"
+#define SERVERPORT	9000
+#define MAXBUFSIZE	512
+#define MINBUFSIZE	50
+
+std::random_device rd;
+std::default_random_engine dre(rd());
 
 void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
-DWORD WINAPI TCPServer4();
-DWORD WINAPI TCPServer6();
 
 int main()
 {
 	WSADATA wsa;
 
-	if (WSAStartup(MAKEWORD(2, 2), &wsa) != NO_ERROR)
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != NOERROR)
 		return 1;
 
-	TCPServer4();
+	SOCKET connectSocket{ socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) };
+
+	if (connectSocket == INVALID_SOCKET)
+		ErrorQuit("socket()");
+
+	sockaddr_in serverAddr;
+	ZeroMemory(&serverAddr, sizeof(serverAddr));
+
+	serverAddr.sin_family = AF_INET;
+	serverAddr.sin_addr.s_addr = inet_addr(SERVERIP);
+	serverAddr.sin_port = htons(SERVERPORT);
+
+	if (connect(connectSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
+		ErrorQuit("connect()");
+
+	std::string sFileName;
+
+	std::cout << "전송하고자 하는 파일의 이름 : ";
+	std::getline(std::cin, sFileName);
+
+	std::ifstream fSendFile{ sFileName, std::ios::binary };
+
+	if (fSendFile.fail())
+	{
+		std::cout << "파일 읽기 실패" << std::endl;
+		return 0;
+	}
+
+	std::vector<std::string> vContain;
+	std::string				 sData;
+	int						 nLength;
+	size_t					 fileSize;
+
+	// 파일의 크기 확인
+	fSendFile.seekg(0, std::ios::end);
+	fileSize = fSendFile.tellg();
+	fSendFile.seekg(0, std::ios::beg);
+
+	// 전송할 파일의 사이즈를 먼저 vector에 push한 다음 파일 이름을 push한다
+	// 전송 순서 : 파일 크기 -> 파일 이름 -> 파일 데이터
+	vContain.push_back(std::to_string(fileSize));
+	vContain.push_back(sFileName);
+
+	// 전송하는 데이터를 가변 길이로 하기 위해 매번 전송하는 바이트 수를 50~ 512 바이트 사이에서 랜덤으로 설정
+	std::uniform_int_distribution<>	 uid(MINBUFSIZE, MAXBUFSIZE);
+	size_t							 uploadSize{};
+
+	while (true)
+	{
+		// 가변 데이터 길이 랜덤 설정
+		int randSize{ uid(dre) };
+		uploadSize += randSize;
+
+		// 전송한 총 바이트 수가 파일의 크기보다 클 경우 파일 사이즈에 맞춰서 전송 바이트 용량을 맞춘다
+		if (uploadSize > fileSize)
+		{
+			uploadSize -= randSize;
+			randSize = fileSize - uploadSize;
+			uploadSize += randSize;
+
+			sData.resize(randSize);
+			fSendFile.read(sData.data(), sData.size());
+			vContain.push_back(sData);
+
+			break;
+		}
+
+		sData.resize(randSize);
+		fSendFile.read(sData.data(), sData.size());
+		vContain.push_back(sData);
+	}
+
+	uploadSize = 0;
+
+	for (std::string sBytes : vContain)
+	{
+		nLength = sBytes.length();
+
+		int nReturnVal{ send(connectSocket, std::to_string(nLength).data(), sizeof(int), 0) };
+
+		if (nReturnVal == SOCKET_ERROR)
+		{
+			DisplayError("send(길이)");
+			break;
+		}
+
+		nReturnVal = send(connectSocket, sBytes.data(), nLength, 0);
+
+		if (nReturnVal == SOCKET_ERROR)
+		{
+			DisplayError("send(데이터)");
+			break;
+		}
+
+		uploadSize += nLength;
+
+		std::cout.precision(4);
+		std::cout << "\x1B[2K";
+		std::cout << "[TCP 클라이언트] " << sizeof(int) << " + " << nReturnVal << "바이트를 보냈습니다." << std::endl;
+		std::cout << "업로드 중(" << static_cast<float>(uploadSize) / fileSize * 100 << "%)   " << std::endl;
+		std::cout << "\x1B[2A";
+	}
+
+	std::cout << "\x1B[B\x1B[K\x1B[A\x1B[K";
+	std::cout << "업로드 완료(" << static_cast<float>(uploadSize) / fileSize * 100 << "%, 총 " << fileSize << "바이트)" << std::endl;
+
+	closesocket(connectSocket);
 
 	WSACleanup();
 }
@@ -48,162 +160,6 @@ void DisplayError(std::string msg)
 	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, WSAGetLastError(),
 		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPTSTR>(&lpMsgBuf), 0, nullptr);
 
-	std::cout << "[" << msg << "] " << static_cast<CHAR*>(lpMsgBuf) << std::endl;
+	std::cout << "[" << msg << "] " << static_cast<char*>(lpMsgBuf) << std::endl;
 	LocalFree(lpMsgBuf);
-}
-
-// TCP 서버(IPv4)
-DWORD WINAPI TCPServer4()
-{
-	// 소켓 타입 : TCP 프로토콜(SOCK_STREAM)
-	SOCKET listenSocket{ socket(AF_INET, SOCK_STREAM, 0) };
-
-	if (listenSocket == INVALID_SOCKET)
-		ErrorQuit("socket()");
-
-	sockaddr_in serverAddr;
-
-	ZeroMemory(&serverAddr, sizeof(serverAddr));
-
-	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serverAddr.sin_port = htons(SERVERPORT);
-
-	if (bind(listenSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
-		ErrorQuit("bind()");
-
-	if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR)
-		ErrorQuit("listen()");
-
-	SOCKET		 clientSocket;
-	sockaddr_in	 clientAddr;
-	INT			 nAddrLen;
-	std::string	 buff;
-	buff.resize(BUFFERSIZE);
-
-	while (TRUE)
-	{
-		nAddrLen = sizeof(clientAddr);
-		clientSocket = accept(listenSocket, reinterpret_cast<sockaddr*>(&clientAddr), &nAddrLen);
-
-		if (clientSocket == INVALID_SOCKET)
-		{
-			DisplayError("accept()");
-			break;
-		}
-
-		std::cout << "[TCP 서버] 클라이언트 접속 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl;
-
-		// 클라이언트와 데이터 통신
-		while (TRUE)
-		{
-			INT nReturnVal{ recv(clientSocket, buff.data(), BUFFERSIZE, 0) };
-
-			if (nReturnVal == SOCKET_ERROR)
-			{
-				DisplayError("recv()");
-				break;
-			}
-			else if (nReturnVal == 0)
-				break;
-
-			// 받은 데이터 출력
-			std::cout << buff << std::endl;
-
-			// 데이터 보내기
-			if (send(clientSocket, buff.data(), nReturnVal, 0) == SOCKET_ERROR)
-			{
-				DisplayError("send()");
-				break;
-			}
-		}
-
-		closesocket(clientSocket);
-
-		std::cout << "[TCP 서버] 클라이언트 종료 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl;
-	}
-
-	closesocket(listenSocket);
-
-	return 0;
-}
-
-// TCP 서버(IPv6)
-DWORD WINAPI TCPServer6()
-{
-	SOCKET listen_sock{ socket(AF_INET6, SOCK_STREAM, 0) };
-
-	if (listen_sock == INVALID_SOCKET)
-		ErrorQuit("socket()");
-
-	sockaddr_in6 serveraddr;
-
-	ZeroMemory(&serveraddr, sizeof(serveraddr));
-
-	serveraddr.sin6_family = AF_INET6;
-	serveraddr.sin6_addr = in6addr_any;
-	serveraddr.sin6_port = htons(SERVERPORT);
-
-	if (bind(listen_sock, reinterpret_cast<sockaddr*>(&serveraddr), sizeof(serveraddr)) == SOCKET_ERROR)
-		ErrorQuit("bind()");
-
-	if (listen(listen_sock, SOMAXCONN) == SOCKET_ERROR)
-		ErrorQuit("listen()");
-
-	SOCKET		 clientSocket;
-	sockaddr_in6 clientAddr;
-	INT			 nAddrLen;
-	std::string	 buff;
-	buff.resize(BUFFERSIZE + 1);
-
-	while (TRUE)
-	{
-		nAddrLen = sizeof(clientAddr);
-		clientSocket = accept(listen_sock, reinterpret_cast<sockaddr*>(&clientAddr), &nAddrLen);
-
-		if (clientSocket == INVALID_SOCKET)
-		{
-			DisplayError("accept()");
-			break;
-		}
-
-		std::string sIpAddr;
-		sIpAddr.resize(50);
-		DWORD dwIpAddrLen{ sizeof(sIpAddr) };
-
-		WSAAddressToString(reinterpret_cast<sockaddr*>(&clientAddr), sizeof(clientAddr), nullptr, sIpAddr.data(), &dwIpAddrLen);
-
-		std::cout << "[TCP 서버] 클라이언트 접속 : " << sIpAddr << std::endl;
-
-		// 클라이언트와 데이터 통신
-		while (TRUE)
-		{
-			INT nReturnVal{ recv(clientSocket, buff.data(), BUFFERSIZE, 0) };
-
-			if (nReturnVal == SOCKET_ERROR)
-			{
-				DisplayError("recv()");
-				break;
-			}
-			else if (nReturnVal == 0)
-				break;
-
-			// 받은 데이터 출력
-			std::cout << buff << std::endl;
-
-			// 데이터 보내기
-			if (send(clientSocket, buff.data(), nReturnVal, 0) == SOCKET_ERROR)
-			{
-				DisplayError("send()");
-				break;
-			}
-		}
-
-		closesocket(clientSocket);
-		std::cout << "[TCP 서버] 클라이언트 종료 : " << sIpAddr << std::endl;
-	}
-
-	closesocket(listen_sock);
-
-	return 0;
 }

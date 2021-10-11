@@ -25,7 +25,7 @@ int main()
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != NO_ERROR)
 		return 1;
 
-	TCPClient6();
+	TCPClient4();
 
 	// 윈속 종료
 	WSACleanup();
