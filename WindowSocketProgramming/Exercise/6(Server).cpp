@@ -13,12 +13,15 @@
 void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
 int recvn(SOCKET socket, std::string* buf, int nLength, int flags);
+SOCKET InitSocket();
 DWORD WINAPI DownloadData(LPVOID arg);
+
+int nClientNum{};		// 연결된 클라이언트 개수
+int nThreadWork{};		// 전체 쓰레드가 일한 횟수
 
 int main()
 {
-	SOCKET listenSocket{ InitSocket() };
-
+	SOCKET			 listenSocket{ InitSocket() };
 	SOCKET			 clientSocket;
 	sockaddr_in		 clientAddr;
 	int				 nClAddrLen{ sizeof(clientAddr) };
@@ -111,9 +114,9 @@ SOCKET InitSocket()
 	sockaddr_in serverAddr;
 	ZeroMemory(&serverAddr, sizeof(serverAddr));
 
-	serverAddr.sin_family		 = AF_INET;
-	serverAddr.sin_addr.s_addr	 = htonl(INADDR_ANY);
-	serverAddr.sin_port			 = htons(SERVERPORT);
+	serverAddr.sin_family = AF_INET;
+	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	serverAddr.sin_port = htons(SERVERPORT);
 
 	if (bind(listenSocket, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)) == SOCKET_ERROR)
 		ErrorQuit("bind()");
@@ -172,14 +175,8 @@ DWORD WINAPI DownloadData(LPVOID arg)
 		else if (nReturnVal == 0)
 			break;
 
-		// 맨 처음에 받아올 파일의 사이즈를 fileSize에 저장
-		if (!bGetFileSize)
-		{
-			bGetFileSize	 = true;
-			fileSize		 = std::stoi(sData);		// 수신받은 데이터는 문자열이므로 정수형으로 바꿔준다
-		}
-		// 다음으로 다운 받을 파일의 이름을 sFileName에 저장후 receiveFile 열기
-		else if (!receiveFile.is_open())
+		// 맨 처음 다운 받을 파일의 이름을 sFileName에 저장후 receiveFile 열기
+		if (!receiveFile.is_open())
 		{
 			sFileName = sData;
 			receiveFile.open(sFileName, std::ios::binary);
@@ -190,6 +187,13 @@ DWORD WINAPI DownloadData(LPVOID arg)
 				return 0;
 			}
 		}
+		// 다음으로 받아올 파일의 사이즈를 fileSize에 저장
+		else if (!bGetFileSize)
+		{
+			bGetFileSize = true;
+			fileSize = std::stoi(sData);		// 수신받은 데이터는 문자열이므로 정수형으로 바꿔준다
+			++nClientNum;
+		}
 		// 이후 파일 데이터 읽어오고 전송률 표시하기
 		else
 		{
@@ -198,13 +202,29 @@ DWORD WINAPI DownloadData(LPVOID arg)
 
 			// 소수점 아래 2자리까지 표시되도록 설정
 			std::cout.precision(4);
-			std::cout << "다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)    \r";
+			std::cout << sFileName << " 다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)    \n";
+
+			++nThreadWork;
+
+			if (nClientNum == 1)
+				std::cout << "\x1B[A";
+			else if (nThreadWork % nClientNum == 0)
+			{
+				for (int i = 0; i < nClientNum; ++i)
+				{
+					std::cout << "\x1B[A\x1B[2K";
+				}
+			}
 		}
 	}
 
-	std::cout << "다운로드 완료(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)" << std::endl;
-	std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << sFileName << " 파일 저장" << std::endl << std::endl;
+	if (nReturnVal == 0)
+	{
+		std::cout << sFileName << " 다운로드 완료(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)" << std::endl;
+		std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << sFileName << " 파일 저장" << std::endl << std::endl;
+	}
 
+	--nClientNum;
 	closesocket(clientSocket);
 	receiveFile.close();
 
