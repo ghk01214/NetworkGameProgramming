@@ -13,7 +13,7 @@ void ErrorQuit(std::string msg);
 void DisplayError(std::string msg);
 DWORD WINAPI TCPServer4();
 DWORD WINAPI TCPServer6();
-DWORD WINAPI ProcessClient(LPVOID arg);
+DWORD WINAPI DownloadData(LPVOID arg);
 
 int main()
 {
@@ -95,7 +95,7 @@ DWORD WINAPI TCPServer4()
 
 		std::cout << "[TCP 서버] 클라이언트 접속 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl;
 
-		hThread = CreateThread(nullptr, 0, ProcessClient, reinterpret_cast<LPVOID>(clientSocket), 0, nullptr);
+		hThread = CreateThread(nullptr, 0, DownloadData, reinterpret_cast<LPVOID>(clientSocket), 0, nullptr);
 
 		if (hThread == nullptr)
 			closesocket(clientSocket);
@@ -188,7 +188,7 @@ DWORD WINAPI TCPServer6()
 	return 0;
 }
 
-DWORD WINAPI ProcessClient(LPVOID arg)
+DWORD WINAPI DownloadData(LPVOID arg)
 {
 	SOCKET clientSocket{ reinterpret_cast<SOCKET>(arg) };
 	sockaddr_in clientAddr;

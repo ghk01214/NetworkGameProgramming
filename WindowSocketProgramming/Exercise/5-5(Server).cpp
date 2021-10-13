@@ -96,14 +96,8 @@ int main()
 			else if (nReturnVal == 0)
 				break;
 
-			// 맨 처음에 받아올 파일의 사이즈를 fileSize에 저장
-			if (!bGetFileSize)
-			{
-				bGetFileSize = true;
-				fileSize = std::stoi(sData);		// 수신받은 데이터는 문자열이므로 정수형으로 바꿔준다
-			}
-			// 다음으로 다운 받을 파일의 이름을 sFileName에 저장후 receiveFile 열기
-			else if (!receiveFile.is_open())
+			// 맨 처음 다운 받을 파일의 이름을 sFileName에 저장후 receiveFile 열기
+			if (!receiveFile.is_open())
 			{
 				sFileName = sData;
 				receiveFile.open(sFileName, std::ios::binary);
@@ -113,6 +107,12 @@ int main()
 					std::cout << "파일 생성 실패" << std::endl;
 					return 0;
 				}
+			}
+			// 다음으로 받아올 파일의 사이즈를 fileSize에 저장
+			else if (!bGetFileSize)
+			{
+				bGetFileSize = true;
+				fileSize = std::stoi(sData);		// 수신받은 데이터는 문자열이므로 정수형으로 바꿔준다
 			}
 			// 이후 파일 데이터 읽어오고 전송률 표시하기
 			else
