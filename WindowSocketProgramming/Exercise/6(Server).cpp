@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <vector>
 #include <WinSock2.h>
 #include <Windows.h>
 
@@ -19,13 +20,15 @@ DWORD WINAPI DownloadData(LPVOID arg);
 int nClientNum{};		// 연결된 클라이언트 개수
 int nThreadWork{};		// 전체 쓰레드가 일한 횟수
 
+std::vector<HANDLE> hClientEvent(2);
+
 int main()
 {
 	SOCKET			 listenSocket{ InitSocket() };
 	SOCKET			 clientSocket;
 	sockaddr_in		 clientAddr;
 	int				 nClAddrLen{ sizeof(clientAddr) };
-	HANDLE			 hThread;
+	std::vector<HANDLE>			 hThread;
 
 	while (true)
 	{
@@ -37,14 +40,28 @@ int main()
 			break;
 		}
 
+		if (!nClientNum)
+		{
+			hClientEvent[0] = CreateEvent(nullptr, false, true, nullptr);
+			hClientEvent[1] = CreateEvent(nullptr, false, false, nullptr);
+		}
+
+		++nClientNum;
+
 		std::cout << "[TCP 서버] 클라이언트 접속 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl << std::endl;
 
-		hThread = CreateThread(nullptr, 0, DownloadData, reinterpret_cast<LPVOID>(clientSocket), 0, nullptr);
+		hThread.push_back(CreateThread(nullptr, 0, DownloadData, reinterpret_cast<LPVOID>(clientSocket), 0, nullptr));
+		
+		if (hThread.size() > 1)
+			WaitForMultipleObjects(hThread.size(), hThread.data(), true, INFINITE);
 
-		if (hThread == nullptr)
+		if (hThread.back() == nullptr)
 			closesocket(clientSocket);
 		else
-			CloseHandle(hThread);
+		{
+			CloseHandle(hThread.back());
+			hThread.pop_back();
+		}
 	}
 
 	closesocket(listenSocket);
@@ -133,7 +150,7 @@ DWORD WINAPI DownloadData(LPVOID arg)
 	SOCKET			 clientSocket{ reinterpret_cast<SOCKET>(arg) };
 	sockaddr_in		 clientAddr;
 	int				 nClAddrLen{ sizeof(clientAddr) };
-	int				 nReturnVal;
+	DWORD			 nReturnVal;
 
 	std::string		 sData;
 	std::string		 sLength;
@@ -144,12 +161,18 @@ DWORD WINAPI DownloadData(LPVOID arg)
 	size_t			 fileSize{};
 	size_t			 downloadSize{};
 	int				 nLength;
+	int my_thread = nClientNum;
 
 	// 소켓 정보 복사
 	getpeername(clientSocket, reinterpret_cast<sockaddr*>(&clientAddr), &nClAddrLen);
 
 	while (true)
 	{
+		if (nClientNum > 1)
+		{
+			nReturnVal = WaitForSingleObject(hClientEvent[my_thread % 2], INFINITE);
+		}
+
 		// 고정 길이 데이터인 가변 길이 데이터의 크기를 받아온다
 		nReturnVal = recvn(clientSocket, &sLength, sizeof(int), 0);
 
@@ -193,7 +216,6 @@ DWORD WINAPI DownloadData(LPVOID arg)
 		{
 			bGetFileSize = true;
 			fileSize = std::stoi(sData);		// 수신받은 데이터는 문자열이므로 정수형으로 바꿔준다
-			++nClientNum;
 		}
 		// 이후 파일 데이터 읽어오고 전송률 표시하기
 		else
@@ -202,20 +224,26 @@ DWORD WINAPI DownloadData(LPVOID arg)
 			downloadSize += nLength;
 
 			// 소수점 아래 2자리까지 표시되도록 설정
-			std::cout.precision(4);
+			std::cout.precision(3);
 			std::cout << sFileName << " 다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)    \n";
 
-			++nThreadWork;
-
-			if (nClientNum == 1)
+			/*if (nClientNum == 1)
 				std::cout << "\x1B[A";
-			else if (nThreadWork % nClientNum == 0)
+			else
 			{
-				for (int i = 0; i < nClientNum; ++i)
+				if (my_thread % nClientNum == 0)
 				{
-					std::cout << "\x1B[A\x1B[2K";
+					for (int i = 0; i < nClientNum; ++i)
+					{
+						std::cout << "\x1B[A\x1B[2K";
+					}
 				}
-			}
+			}*/
+		}
+
+		if (nClientNum > 1)
+		{
+			SetEvent(hClientEvent[my_thread - 1]);
 		}
 	}
 
@@ -226,6 +254,7 @@ DWORD WINAPI DownloadData(LPVOID arg)
 	}
 
 	--nClientNum;
+	SetEvent(hClientEvent[my_thread - 1]);
 	closesocket(clientSocket);
 	receiveFile.close();
 
