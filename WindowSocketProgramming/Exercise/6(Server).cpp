@@ -20,15 +20,17 @@ DWORD WINAPI DownloadData(LPVOID arg);
 int nClientNum{};		// 연결된 클라이언트 개수
 int nThreadWork{};		// 전체 쓰레드가 일한 횟수
 
-std::vector<HANDLE> hClientEvent(2);
+HANDLE hEvent;
+bool isSecondThread{ false };
 
 int main()
 {
-	SOCKET			 listenSocket{ InitSocket() };
-	SOCKET			 clientSocket;
-	sockaddr_in		 clientAddr;
-	int				 nClAddrLen{ sizeof(clientAddr) };
-	std::vector<HANDLE>			 hThread;
+	SOCKET					 listenSocket{ InitSocket() };
+	SOCKET					 clientSocket;
+	sockaddr_in				 clientAddr;
+	int						 nClAddrLen{ sizeof(clientAddr) };
+	HANDLE					 hThread;
+	std::vector<HANDLE>		 vThread;
 
 	while (true)
 	{
@@ -41,27 +43,22 @@ int main()
 		}
 
 		if (!nClientNum)
-		{
-			hClientEvent[0] = CreateEvent(nullptr, false, true, nullptr);
-			hClientEvent[1] = CreateEvent(nullptr, false, false, nullptr);
-		}
+			hEvent = CreateEvent(nullptr, false, true, nullptr);
 
 		++nClientNum;
 
 		std::cout << "[TCP 서버] 클라이언트 접속 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl << std::endl;
 
-		hThread.push_back(CreateThread(nullptr, 0, DownloadData, reinterpret_cast<LPVOID>(clientSocket), 0, nullptr));
+		hThread = CreateThread(nullptr, 0, DownloadData, reinterpret_cast<LPVOID>(clientSocket), 0, nullptr);
+		vThread.push_back(hThread);
 		
-		if (hThread.size() > 1)
-			WaitForMultipleObjects(hThread.size(), hThread.data(), true, INFINITE);
+		if (vThread.size() > 1)
+			WaitForMultipleObjects(vThread.size(), vThread.data(), true, INFINITE);
 
-		if (hThread.back() == nullptr)
+		if (hThread == nullptr)
 			closesocket(clientSocket);
 		else
-		{
-			CloseHandle(hThread.back());
-			hThread.pop_back();
-		}
+			CloseHandle(hThread);
 	}
 
 	closesocket(listenSocket);
@@ -161,7 +158,6 @@ DWORD WINAPI DownloadData(LPVOID arg)
 	size_t			 fileSize{};
 	size_t			 downloadSize{};
 	int				 nLength;
-	int my_thread = nClientNum;
 
 	// 소켓 정보 복사
 	getpeername(clientSocket, reinterpret_cast<sockaddr*>(&clientAddr), &nClAddrLen);
@@ -169,9 +165,7 @@ DWORD WINAPI DownloadData(LPVOID arg)
 	while (true)
 	{
 		if (nClientNum > 1)
-		{
-			nReturnVal = WaitForSingleObject(hClientEvent[my_thread % 2], INFINITE);
-		}
+			nReturnVal = WaitForSingleObject(hEvent, INFINITE);
 
 		// 고정 길이 데이터인 가변 길이 데이터의 크기를 받아온다
 		nReturnVal = recvn(clientSocket, &sLength, sizeof(int), 0);
@@ -226,24 +220,28 @@ DWORD WINAPI DownloadData(LPVOID arg)
 			// 소수점 아래 2자리까지 표시되도록 설정
 			std::cout.precision(3);
 			std::cout << sFileName << " 다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)    \n";
-
-			/*if (nClientNum == 1)
+			
+			if (nClientNum == 1)
 				std::cout << "\x1B[A";
 			else
 			{
-				if (my_thread % nClientNum == 0)
+				if (isSecondThread)
 				{
+					Sleep(1000);
+
 					for (int i = 0; i < nClientNum; ++i)
 					{
 						std::cout << "\x1B[A\x1B[2K";
 					}
 				}
-			}*/
+			}
 		}
 
 		if (nClientNum > 1)
 		{
-			SetEvent(hClientEvent[my_thread - 1]);
+			isSecondThread = true;
+
+			SetEvent(hEvent);
 		}
 	}
 
@@ -254,10 +252,9 @@ DWORD WINAPI DownloadData(LPVOID arg)
 	}
 
 	--nClientNum;
-	SetEvent(hClientEvent[my_thread - 1]);
+	SetEvent(hEvent);
 	closesocket(clientSocket);
-	receiveFile.close();
-
+	
 	std::cout << "[TCP 서버] 클라이언트 종료 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl;
 	std::cout << "========================================================================" << std::endl;
 }
