@@ -17,8 +17,8 @@ int recvn(SOCKET socket, std::string* buf, int nLength, int flags);
 SOCKET InitSocket();
 DWORD WINAPI DownloadData(LPVOID arg);
 
-int nClientNum{};		// 연결된 클라이언트 개수
-int nThreadWork{};		// 전체 쓰레드가 일한 횟수
+int clientNum{};			// 연결된 클라이언트 개수
+int workingThread{};		// 일하는 스레드 개수
 
 HANDLE hEvent;
 bool isSecondThread{ false };
@@ -28,13 +28,13 @@ int main()
 	SOCKET					 listenSocket{ InitSocket() };
 	SOCKET					 clientSocket;
 	sockaddr_in				 clientAddr;
-	int						 nClAddrLen{ sizeof(clientAddr) };
+	int						 cliAddrLen{ sizeof(clientAddr) };
 	HANDLE					 hThread;
 	std::vector<HANDLE>		 vThread;
 
 	while (true)
 	{
-		clientSocket = accept(listenSocket, reinterpret_cast<sockaddr*>(&clientAddr), &nClAddrLen);
+		clientSocket = accept(listenSocket, reinterpret_cast<sockaddr*>(&clientAddr), &cliAddrLen);
 
 		if (clientSocket == INVALID_SOCKET)
 		{
@@ -42,10 +42,10 @@ int main()
 			break;
 		}
 
-		if (!nClientNum)
+		if (!clientNum)
 			hEvent = CreateEvent(nullptr, false, true, nullptr);
 
-		++nClientNum;
+		++clientNum;
 
 		std::cout << "[TCP 서버] 클라이언트 접속 : IP 주소 = " << inet_ntoa(clientAddr.sin_addr) << ", 포트 번호 = " << ntohs(clientAddr.sin_port) << std::endl << std::endl;
 
@@ -68,28 +68,28 @@ int main()
 // 소켓 함수 오류 출력 후 종료
 void ErrorQuit(std::string msg)
 {
-	LPVOID lpMsgBuf;
+	LPVOID msgBuf;
 
 	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, WSAGetLastError(),
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPTSTR>(&lpMsgBuf), 0, nullptr);
+		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPTSTR>(&msgBuf), 0, nullptr);
 
-	MessageBox(nullptr, static_cast<LPCTSTR>(lpMsgBuf), msg.c_str(), MB_ICONERROR);
+	MessageBox(nullptr, static_cast<LPCTSTR>(msgBuf), msg.c_str(), MB_ICONERROR);
 
-	LocalFree(lpMsgBuf);
+	LocalFree(msgBuf);
 	exit(true);
 }
 
 // 소켓 함수 오류 출력
 void DisplayError(std::string msg)
 {
-	LPVOID lpMsgBuf;
+	LPVOID msgBuf;
 
 	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, WSAGetLastError(),
-		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPTSTR>(&lpMsgBuf), 0, nullptr);
+		MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<LPTSTR>(&msgBuf), 0, nullptr);
 
-	std::cout << "[" << msg << "] " << static_cast<char*>(lpMsgBuf) << std::endl;
+	std::cout << "[" << msg << "] " << static_cast<char*>(msgBuf) << std::endl;
 
-	LocalFree(lpMsgBuf);
+	LocalFree(msgBuf);
 }
 
 int recvn(SOCKET socket, std::string* buf, int nLength, int flags)
@@ -146,36 +146,36 @@ DWORD WINAPI DownloadData(LPVOID arg)
 {
 	SOCKET			 clientSocket{ reinterpret_cast<SOCKET>(arg) };
 	sockaddr_in		 clientAddr;
-	int				 nClAddrLen{ sizeof(clientAddr) };
-	DWORD			 nReturnVal;
+	int				 cliAddrLen{ sizeof(clientAddr) };
+	DWORD			 returnVal;
 
 	std::string		 sData;
 	std::string		 sLength;
 	std::ofstream	 receiveFile;
-	std::string		 sFileName;
+	std::string		 fileName;
 
-	bool			 bGetFileSize{ false };
+	bool			 getFileSize{ false };
 	size_t			 fileSize{};
 	size_t			 downloadSize{};
 	int				 nLength;
 
 	// 소켓 정보 복사
-	getpeername(clientSocket, reinterpret_cast<sockaddr*>(&clientAddr), &nClAddrLen);
+	getpeername(clientSocket, reinterpret_cast<sockaddr*>(&clientAddr), &cliAddrLen);
 
 	while (true)
 	{
-		if (nClientNum > 1)
-			nReturnVal = WaitForSingleObject(hEvent, INFINITE);
+		if (clientNum > 1)
+			returnVal = WaitForSingleObject(hEvent, INFINITE);
 
 		// 고정 길이 데이터인 가변 길이 데이터의 크기를 받아온다
-		nReturnVal = recvn(clientSocket, &sLength, sizeof(int), 0);
+		returnVal = recvn(clientSocket, &sLength, sizeof(int), 0);
 
-		if (nReturnVal == SOCKET_ERROR)
+		if (returnVal == SOCKET_ERROR)
 		{
 			DisplayError("recvn(length)");
 			break;
 		}
-		else if (nReturnVal == 0)
+		else if (returnVal == 0)
 			break;
 
 		// 고정 길이 데이터로 받은 가변 데이터의 크기에 맞춰 string 크기 변경
@@ -183,21 +183,22 @@ DWORD WINAPI DownloadData(LPVOID arg)
 		sData.resize(nLength);
 
 		// 가변 길이 데이터인 실제 전송하고자 하는 데이터를 받아온다
-		nReturnVal = recvn(clientSocket, &sData, nLength, 0);
+		returnVal = recvn(clientSocket, &sData, nLength, 0);
 
-		if (nReturnVal == SOCKET_ERROR)
+		if (returnVal == SOCKET_ERROR)
 		{
 			DisplayError("recvn(data)");
 			break;
 		}
-		else if (nReturnVal == 0)
+		else if (returnVal == 0)
 			break;
 
 		// 맨 처음 다운 받을 파일의 이름을 sFileName에 저장후 receiveFile 열기
 		if (!receiveFile.is_open())
 		{
-			sFileName = sData;
-			receiveFile.open(sFileName, std::ios::binary);
+			fileName = sData;
+			receiveFile.open(fileName, std::ios::binary);
+			++workingThread;
 
 			if (receiveFile.fail())
 			{
@@ -206,9 +207,9 @@ DWORD WINAPI DownloadData(LPVOID arg)
 			}
 		}
 		// 다음으로 받아올 파일의 사이즈를 fileSize에 저장
-		else if (!bGetFileSize)
+		else if (!getFileSize)
 		{
-			bGetFileSize = true;
+			getFileSize = true;
 			fileSize = std::stoi(sData);		// 수신받은 데이터는 문자열이므로 정수형으로 바꿔준다
 		}
 		// 이후 파일 데이터 읽어오고 전송률 표시하기
@@ -218,40 +219,39 @@ DWORD WINAPI DownloadData(LPVOID arg)
 			downloadSize += nLength;
 
 			// 소수점 아래 2자리까지 표시되도록 설정
-			std::cout.precision(3);
-			std::cout << sFileName << " 다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)    \n";
+			std::cout.precision(4);
+			std::cout << fileName << " 다운로드 중(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)    \n";
 			
-			if (nClientNum == 1)
+			if (workingThread == 1)
 				std::cout << "\x1B[A";
 			else
 			{
 				if (isSecondThread)
 				{
-					Sleep(1000);
-
-					for (int i = 0; i < nClientNum; ++i)
-					{
-						std::cout << "\x1B[A\x1B[2K";
-					}
+					std::cout << "\x1B[2A";
 				}
 			}
 		}
 
-		if (nClientNum > 1)
+		if (workingThread > 1)
 		{
-			isSecondThread = true;
+			if (!isSecondThread)
+				isSecondThread = true;
+			else
+				isSecondThread = false;
 
 			SetEvent(hEvent);
 		}
 	}
 
-	if (nReturnVal == 0)
+	if (returnVal == 0)
 	{
-		std::cout << sFileName << " 다운로드 완료(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)" << std::endl;
-		std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << sFileName << " 파일 저장" << std::endl << std::endl;
+		std::cout << fileName << " 다운로드 완료(" << static_cast<float>(downloadSize) / fileSize * 100 << "%)" << std::endl;
+		std::cout << "[TCP/" << inet_ntoa(clientAddr.sin_addr) << " : " << ntohs(clientAddr.sin_port) << "] " << fileName << " 파일 저장" << std::endl << std::endl;
 	}
 
-	--nClientNum;
+	--clientNum;
+	--workingThread;
 	SetEvent(hEvent);
 	closesocket(clientSocket);
 	
